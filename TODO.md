@@ -8,6 +8,6 @@
 - [x] 3. Create `.github/workflows/deploy.yml` (GitHub Actions build & deploy)
 - [x] 4. Build the project locally to verify it compiles
 - [x] 5. Commit and push changes to GitHub
-- [ ] 6. Enable GitHub Pages in repo settings (Source = "GitHub Actions") — REQUIRED, workflow's "Setup Pages" step fails without this
-- [ ] 7. Re-run the workflow / push again after enabling
-- [ ] 8. Verify the live site at https://adesiji.github.io/pulse-crm/
+- [x] 6. Enable GitHub Pages in repo settings (Source = "GitHub Actions")
+- [x] 7. Re-run the workflow — run #31275736920 succeeded
+- [x] 8. Verify the live site — HTTP 200 at https://adesiji.github.io/pulse-crm/ ✅ LIVE
