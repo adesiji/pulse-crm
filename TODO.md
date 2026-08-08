@@ -1,7 +1,12 @@
-# Task: Settings page, notifications, and auth registration
+# Pulse CRM — Deployment to GitHub Pages
 
-- [x] 1. `services/api.js` — add REGISTERED_USERS, strict login, register()
-- [x] 2. `features/auth/LoginPage.jsx` — add register mode + "Don't have an account" toggle + toasts
-- [x] 3. `features/settings/SettingsPage.jsx` — profile form + notification prefs + test toast
-- [x] 4. `features/leads/LeadForm.jsx` — success toast on create
-- [x] 5. Verify build (`npm run build`)
+## Steps
+
+- [x] 0. Confirm plan with user
+- [x] 1. Update `vite.config.js` to set `base: '/pulse-crm/'`
+- [x] 2. Switch `main.jsx` from `BrowserRouter` to `HashRouter`
+- [x] 3. Create `.github/workflows/deploy.yml` (GitHub Actions build & deploy)
+- [x] 4. Build the project locally to verify it compiles
+- [ ] 5. Commit and push changes to GitHub
+- [ ] 6. Enable GitHub Pages in repo settings (via workflow)
+- [ ] 7. Verify the live site at https://adesiji.github.io/pulse-crm/
