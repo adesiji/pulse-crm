@@ -102,6 +102,12 @@ export function LeadsPage() {
     dispatch({ type: "SET_STATUS_FILTER", payload: e.target.value });
   };
 
+  const handleResetFilters = () => {
+    dispatch({ type: "RESET_FILTERS" });
+  };
+
+  const hasActiveFilters = searchTerm.trim() !== "" || statusFilter !== "all";
+
   const handleSort = (columnKey) => {
     dispatch({
       type: "SET_SORT",
@@ -176,6 +182,11 @@ export function LeadsPage() {
           <option value="qualified">Qualified</option>
           <option value="lost">Lost</option>
         </select>
+        {hasActiveFilters && (
+          <Button variant="ghost" onClick={handleResetFilters}>
+            Reset filters
+          </Button>
+        )}
       </FilterBar>
 
       {error && (

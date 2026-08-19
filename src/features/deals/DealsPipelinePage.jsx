@@ -1,89 +1,75 @@
-import React, { useEffect, useReducer } from "react";
+import React, { useEffect, useMemo, useReducer, useState } from "react";
 import { DealColumn } from "./DealColumn.jsx";
 import { DEAL_STAGES } from "../../services/mockData/deals.js";
 import { api } from "../../services/api.js";
 import { LoadingSkeleton } from "../../components/ui/LoadingSkeleton.jsx";
 import { useFetch } from "../../hooks/useFetch.js";
+import { useToast } from "../../context/ToastContext.jsx";
 
 /**
- * DealsPipelinePage — YOURS TO BUILD.
+ * DealsPipelinePage — a kanban board: one column per pipeline stage
+ * (DEAL_STAGES, imported above so the columns and the data agree on
+ * valid stage names).
  *
- * A kanban board: one column per pipeline stage (DEAL_STAGES, imported
- * above so the columns and the data agree on valid stage names). This
- * page is a good place to practice component decomposition ON PURPOSE:
- * decide what state lives here vs. in DealColumn vs. in DealCard.
+ * State: `deals` lives in a reducer (MOVE_DEAL is a clean single-action
+ * transition for "move a deal from stage A to stage B"). Which deal is
+ * currently being dragged is separate, transient UI state (useState) —
+ * it doesn't need to survive a re-fetch and isn't part of what gets
+ * persisted, only drag-feedback styling in DealCard/DealColumn.
  *
- * STAGE: 5-6 (fetch deals), then a stretch goal in drag-and-drop which
- * touches Stage 9 (useReducer) nicely.
+ * Drag-and-drop: native HTML5 DnD. DealCard is the drag source
+ * (onDragStart/onDragEnd), DealColumn is the drop target
+ * (onDragOver/onDragLeave/onDrop). On drop, the move is applied
+ * optimistically via MOVE_DEAL, then persisted with
+ * api.updateDealStage — if that fails, the same MOVE_DEAL action rolls
+ * the card back to its original stage and a toast explains why.
  *
- * TODO:
- * // 1. useEffect + useState (or useFetch, once built) to load
- * //    api.getDeals()
- * // 2. Group the flat `deals` array by `stage` — one array per stage in
- * //    DEAL_STAGES. Where should this grouping logic live: inline here,
- * //    or a small pure function in utils/? (Compare to filterUtils.js
- * //    for precedent.)
- * // 3. Render one <DealColumn> per stage, passing it only the deals for
- * //    that stage.
- *
- * STRETCH GOAL — drag and drop between columns:
- * // 4. Make DealCard draggable (native HTML drag events: onDragStart,
- * //    or a library if you prefer) and DealColumn a drop target
- * //    (onDragOver, onDrop).
- * // 5. On drop, call api.updateDealStage(dealId, newStage) and update
- * //    local state. This is a great candidate for useReducer: the
- * //    "move a deal from stage A to stage B" transition is exactly the
- * //    kind of multi-field state update that's awkward with useState
- * //    but natural as a single reducer action:
- * //    { type: 'MOVE_DEAL', payload: { dealId, toStage } }
- *
- * COMMON MISTAKES:
- * - Grouping deals by stage INSIDE the render return (fine at this
- *   scale, but get in the habit of naming it above the return so it's
- *   trivial to wrap in useMemo later — same note as LeadsPage).
- * - Forgetting a stage can legitimately have zero deals — DealColumn
- *   should render fine with an empty array, don't special-case it away.
- *
- * QUESTIONS TO THINK ABOUT:
- * - If you build drag-and-drop, where does the "deal being dragged"
- *   live — component state in DealCard, or lifted up to this page? What
- *   does DealColumn need to know to accept a drop?
+ * Grouping deals by stage is a pure function of `state.deals`, memoized
+ * with useMemo so drag-driven re-renders (which only touch the local
+ * `draggedDealId` state) don't re-group the whole board every time.
  */
-export function DealsPipelinePage() {
-  const initialState = {
-    deals: [],
-  };
+const initialState = {
+  deals: [],
+};
 
-  function dealReducer(state, action) {
-    switch (action.type) {
-      case "SET_DEALS":
-        return { ...state, deals: action.payload };
-      case "MOVE_DEAL":
-        return {
-          ...state,
-          deals: state.deals.map((deal) =>
-            deal.id === action.payload.dealId
-              ? { ...deal, stage: action.payload.toStage }
-              : deal
-          ),
-        };
-      default:
-        return state;
+function dealReducer(state, action) {
+  switch (action.type) {
+    case "SET_DEALS":
+      return { ...state, deals: action.payload };
+    case "MOVE_DEAL":
+      return {
+        ...state,
+        deals: state.deals.map((deal) =>
+          deal.id === action.payload.dealId
+            ? { ...deal, stage: action.payload.toStage }
+            : deal
+        ),
+      };
+    default:
+      return state;
+  }
+}
+
+// utils/dealUtils.js candidate — pure, so it's a clean useMemo dependency
+// below (see the "Pipeline grouping" note in the README's Stage 10).
+function groupDealsByStage(deals) {
+  return deals.reduce((acc, deal) => {
+    if (!acc[deal.stage]) {
+      acc[deal.stage] = [];
     }
-  }
+    acc[deal.stage].push(deal);
+    return acc;
+  }, {});
+}
 
-  // utils/dealUtils.js
-  function groupDealsByStage(deals) {
-    return deals.reduce((acc, deal) => {
-      if (!acc[deal.stage]) {
-        acc[deal.stage] = [];
-      }
-      acc[deal.stage].push(deal);
-      return acc;
-    }, {});
-  }
-
+export function DealsPipelinePage() {
   const [state, dispatch] = useReducer(dealReducer, initialState);
+  const { showToast } = useToast();
+
+  // "Deal being dragged" is transient, UI-only state — it doesn't affect
+  // what's persisted, only drag-feedback styling (DealCard/DealColumn),
+  // so it lives here as plain useState rather than in the reducer.
+  const [draggedDealId, setDraggedDealId] = useState(null);
 
   const { data, error, isLoading } = useFetch(() => api.getDeals(), []);
 
@@ -95,23 +81,57 @@ export function DealsPipelinePage() {
     }
   }, [dispatch, data]);
 
+  // Grouping is a pure derived value of `state.deals` — memoized so
+  // dragging (which only touches the local `draggedDealId` state above)
+  // doesn't re-group the whole board on every dragover-driven re-render.
+  const groupedDeals = useMemo(
+    () => groupDealsByStage(state.deals),
+    [state.deals]
+  );
+
+  const handleDragStart = (dealId) => setDraggedDealId(dealId);
+  const handleDragEnd = () => setDraggedDealId(null);
+
+  const handleDropDeal = async (dealId, toStage) => {
+    const deal = state.deals.find((d) => d.id === dealId);
+    if (!deal || deal.stage === toStage) return; // no-op drop
+
+    const fromStage = deal.stage;
+
+    // Optimistic update: move the card immediately, then persist.
+    dispatch({ type: "MOVE_DEAL", payload: { dealId, toStage } });
+
+    try {
+      await api.updateDealStage(dealId, toStage);
+    } catch (err) {
+      // Persistence failed — roll back to the previous stage and let the
+      // user know, using the same ToastContext pattern the rest of the
+      // app uses for async feedback.
+      dispatch({ type: "MOVE_DEAL", payload: { dealId, toStage: fromStage } });
+      showToast(
+        err?.message || "Failed to move deal. Please try again.",
+        "error"
+      );
+    }
+  };
+
   if (isLoading) return <LoadingSkeleton />;
   if (error) return <div>Error: {error}</div>;
-
-  const groupedDeals = groupDealsByStage(state.deals);
 
   return (
     <div>
       <h1>Deals</h1>
-      <p>
-        Drag deals across stages as they progress (once you build that part).
-      </p>
+      <p>Drag deals across stages as they progress.</p>
       <div className="kanban-board mt-4">
         {DEAL_STAGES.map((stage) => (
           <DealColumn
             key={stage}
             stage={stage}
             deals={groupedDeals[stage] || []}
+            draggedDealId={draggedDealId}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDropDeal={handleDropDeal}
           />
         ))}
       </div>
@@ -119,10 +139,3 @@ export function DealsPipelinePage() {
   );
 }
 
-/*
- * ── CHECKPOINT ───────────────────────────────────────────────────────
- * Build next:   Fetch and group deals by stage.
- * Practice:     useEffect, data transformation, component composition.
- * Stretch:      Drag-and-drop + useReducer for stage transitions.
- * ────────────────────────────────────────────────────────────────────
- */
